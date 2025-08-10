@@ -15,6 +15,17 @@ from . import bootstrap_host
 
 app = FastAPI()
 
+# GitHub script URLs - change these to point to different repositories or branches
+GITHUB_SCRIPT_BASE_URL = "https://raw.githubusercontent.com/skillDeCoder/idle-finance-v2/main/automation/golem/scripts"
+GITHUB_SCRIPT_URLS = {
+    "hello_world": "https://raw.githubusercontent.com/dynamo-bit/automation/master/scripts/hello-world.sh",
+    "add_golem_path": f"{GITHUB_SCRIPT_BASE_URL}/add-golem-path.sh",
+    "install_golem": f"{GITHUB_SCRIPT_BASE_URL}/install-golem.sh",
+    "install_kvm": f"{GITHUB_SCRIPT_BASE_URL}/install-kvm.sh",
+    "run_golem": f"{GITHUB_SCRIPT_BASE_URL}/run-golem.sh",
+    "set_kvm_permissions": f"{GITHUB_SCRIPT_BASE_URL}/set-kvm-permission.sh"
+}
+
 
 
 # Golem settings model (same as before)
@@ -550,55 +561,55 @@ def get_ya_provider_log(lines: int = 20):
 def hello_world():
     """Execute hello world script from Idle Finance GitHub repository"""
     try:
-        print("🚀 [HELLO-WORLD] Starting hello-world endpoint")
+        print("[HELLO-WORLD] Starting hello-world endpoint")
         
         # GitHub raw URL for the hello-world script
-        script_url = "https://raw.githubusercontent.com/skillDeCoder/idle-finance-v2/main/automation/golem/scripts/hello-world.sh"
-        print(f"📥 [HELLO-WORLD] Downloading script from: {script_url}")
+        script_url = GITHUB_SCRIPT_URLS["hello_world"]
+        print(f"[HELLO-WORLD] Downloading script from: {script_url}")
         
         # Download the script with timeout
         response = requests.get(script_url, timeout=15)
-        print(f"📊 [HELLO-WORLD] HTTP Response Status: {response.status_code}")
+        print(f"[HELLO-WORLD] HTTP Response Status: {response.status_code}")
         
         if response.status_code == 404:
-            print(f"❌ [HELLO-WORLD] File not found at GitHub URL")
+            print(f"[HELLO-WORLD] File not found at GitHub URL")
             # Create a simple test script as fallback
             test_script = """#!/bin/bash
 echo "Hello World from Local Fallback!"
 echo "GitHub file not found, using local test script"
 echo "Current time: $(date)"
 """
-            print(f"📄 [HELLO-WORLD] Using fallback script content")
+            print(f"[HELLO-WORLD] Using fallback script content")
             response.text = test_script
         else:
             response.raise_for_status()  # Raise an exception for bad status codes
         
-        print(f"📄 [HELLO-WORLD] Downloaded script content ({len(response.text)} chars):")
-        print(f"📄 [HELLO-WORLD] Script preview: {response.text[:200]}...")
+        print(f"[HELLO-WORLD] Downloaded script content ({len(response.text)} chars):")
+        print(f"[HELLO-WORLD] Script preview: {response.text[:200]}...")
         
         # Create a temporary file and write the script content
         with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as temp_file:
             temp_file.write(response.text)
             temp_script_path = temp_file.name
         
-        print(f"💾 [HELLO-WORLD] Saved script to temp file: {temp_script_path}")
+        print(f"[HELLO-WORLD] Saved script to temp file: {temp_script_path}")
         
         # Make the script executable
         os.chmod(temp_script_path, 0o755)
-        print(f"🔒 [HELLO-WORLD] Made script executable")
+        print(f"[HELLO-WORLD] Made script executable")
         
         # Execute the script
-        print(f"⚡ [HELLO-WORLD] Executing script...")
+        print(f"[HELLO-WORLD] Executing script...")
         result = subprocess.run(["bash", temp_script_path], capture_output=True, text=True, check=True)
-        print(f"✅ [HELLO-WORLD] Script execution completed")
-        print(f"📤 [HELLO-WORLD] Script output: {result.stdout.strip()}")
-        print(f"📤 [HELLO-WORLD] Script stderr: {result.stderr.strip()}")
+        print(f"[HELLO-WORLD] Script execution completed")
+        print(f"[HELLO-WORLD] Script output: {result.stdout.strip()}")
+        print(f"[HELLO-WORLD] Script stderr: {result.stderr.strip()}")
         
         # Clean up the temporary file
         os.unlink(temp_script_path)
-        print(f"🗑️ [HELLO-WORLD] Cleaned up temp file: {temp_script_path}")
+        print(f"[HELLO-WORLD] Cleaned up temp file: {temp_script_path}")
         
-        print(f"🎉 [HELLO-WORLD] Successfully completed!")
+        print(f"[HELLO-WORLD] Successfully completed!")
         
         return {
             "status": "success",
@@ -609,7 +620,7 @@ echo "Current time: $(date)"
         }
         
     except requests.RequestException as e:
-        print(f"❌ [HELLO-WORLD] Request error: {str(e)}")
+        print(f"[HELLO-WORLD] Request error: {str(e)}")
         return {
             "status": "error",
             "message": "Could not download hello world script from GitHub",
@@ -617,9 +628,9 @@ echo "Current time: $(date)"
             "details": str(e)
         }
     except subprocess.CalledProcessError as e:
-        print(f"❌ [HELLO-WORLD] Script execution error: {str(e)}")
-        print(f"❌ [HELLO-WORLD] Script stdout: {e.stdout}")
-        print(f"❌ [HELLO-WORLD] Script stderr: {e.stderr}")
+        print(f"[HELLO-WORLD] Script execution error: {str(e)}")
+        print(f"[HELLO-WORLD] Script stdout: {e.stdout}")
+        print(f"[HELLO-WORLD] Script stderr: {e.stderr}")
         return {
             "status": "error",
             "message": "Could not execute hello world script",
@@ -628,13 +639,90 @@ echo "Current time: $(date)"
             "stderr": e.stderr
         }
     except Exception as e:
-        print(f"❌ [HELLO-WORLD] Unexpected error: {str(e)}")
+        print(f"[HELLO-WORLD] Unexpected error: {str(e)}")
         return {
             "status": "error",
             "message": f"Unexpected error: {str(e)}"
         }
 
 
+@app.post("/run-script")
+def run_script_from_url(script_url: str = Body(..., embed=True)):
+    """Execute any script from a given URL"""
+    try:
+        print(f"[RUN-SCRIPT] Starting script execution from URL")
+        print(f"[RUN-SCRIPT] Downloading script from: {script_url}")
+        
+        # Download the script
+        response = requests.get(script_url, timeout=15)
+        print(f"[RUN-SCRIPT] HTTP Response Status: {response.status_code}")
+        response.raise_for_status()
+        
+        print(f"[RUN-SCRIPT] Downloaded script content ({len(response.text)} chars)")
+        print(f"[RUN-SCRIPT] Script preview: {response.text[:200]}...")
+        
+        # Create temporary file and write script content
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as temp_file:
+            temp_file.write(response.text)
+            temp_script_path = temp_file.name
+        
+        print(f"[RUN-SCRIPT] Saved script to temp file: {temp_script_path}")
+        
+        # Make script executable
+        os.chmod(temp_script_path, 0o755)
+        print(f"[RUN-SCRIPT] Made script executable")
+        
+        # Execute the script
+        print(f"[RUN-SCRIPT] Executing script...")
+        result = subprocess.run(["bash", temp_script_path], capture_output=True, text=True, check=True)
+        
+        print(f"[RUN-SCRIPT] Script execution completed")
+        print(f"[RUN-SCRIPT] Script output: {result.stdout.strip()}")
+        print(f"[RUN-SCRIPT] Script stderr: {result.stderr.strip()}")
+        
+        # Clean up
+        os.unlink(temp_script_path)
+        print(f"[RUN-SCRIPT] Cleaned up temp file: {temp_script_path}")
+        
+        print(f"[RUN-SCRIPT] Successfully completed!")
+        
+        return {
+            "status": "success",
+            "message": "Script executed successfully",
+            "output": result.stdout.strip(),
+            "stderr": result.stderr.strip() if result.stderr.strip() else None,
+            "script_url": script_url,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "script_content_preview": response.text[:200] + "..." if len(response.text) > 200 else response.text
+        }
+        
+    except requests.RequestException as e:
+        print(f"[RUN-SCRIPT] Request error: {str(e)}")
+        return {
+            "status": "error",
+            "message": "Could not download script from URL",
+            "script_url": script_url,
+            "details": str(e)
+        }
+    except subprocess.CalledProcessError as e:
+        print(f"[RUN-SCRIPT] Script execution error: {str(e)}")
+        print(f"[RUN-SCRIPT] Script stdout: {e.stdout}")
+        print(f"[RUN-SCRIPT] Script stderr: {e.stderr}")
+        return {
+            "status": "error",
+            "message": "Failed to execute script",
+            "details": str(e),
+            "stdout": e.stdout,
+            "stderr": e.stderr,
+            "script_url": script_url
+        }
+    except Exception as e:
+        print(f"[RUN-SCRIPT] Unexpected error: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Unexpected error: {str(e)}",
+            "script_url": script_url
+        }
 
 
 

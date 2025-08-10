@@ -3,6 +3,17 @@ import time
 import platform
 import os
 import re
+import requests
+import tempfile
+
+# GitHub script URLs - change these to point to different repositories or branches
+GITHUB_SCRIPT_BASE_URL = "https://raw.githubusercontent.com/skillDeCoder/idle-finance-v2/main/automation/golem/scripts"
+GITHUB_SCRIPT_URLS = {
+    "install_golem": f"{GITHUB_SCRIPT_BASE_URL}/install-golem.sh",
+    "add_golem_path": f"{GITHUB_SCRIPT_BASE_URL}/add-golem-path.sh",
+    "install_kvm": f"{GITHUB_SCRIPT_BASE_URL}/install-kvm.sh",
+    "set_kvm_permissions": f"{GITHUB_SCRIPT_BASE_URL}/set-kvm-permission.sh"
+}
 
 def clean_ansi(text: str) -> str:
     """Remove ANSI escape codes from text"""
@@ -94,7 +105,7 @@ def bootstrap_host():
             "message": "Host requirements met",
             "requirements": requirements
         })
-        print(f"✅ Step {current_step} completed: Requirements checked")
+        print(f"Step {current_step} completed: Requirements checked")
         
         # Wait a moment
         time.sleep(2)
@@ -112,7 +123,7 @@ def bootstrap_host():
                 "status": "success",
                 "message": "Expect is already installed"
             })
-            print(f"✅ Step {current_step} completed: Expect already installed")
+            print(f"Step {current_step} completed: Expect already installed")
         except (subprocess.CalledProcessError, FileNotFoundError):
             try:
                 # Install expect using apt
@@ -126,7 +137,7 @@ def bootstrap_host():
                     "message": "Expect installed successfully",
                     "output": result.stdout
                 })
-                print(f"✅ Step {current_step} completed: Expect installed")
+                print(f"Step {current_step} completed: Expect installed")
             except subprocess.CalledProcessError as e:
                 bootstrap_steps.append({
                     "step": current_step,
@@ -158,21 +169,54 @@ def bootstrap_host():
                 "status": "success",
                 "message": "Golem is already installed"
             })
-            print(f"✅ Step {current_step} completed: Golem already installed")
+            print(f"Step {current_step} completed: Golem already installed")
         else:
-            # Install Golem using the existing script
+            # Install Golem using the GitHub script
             try:
-                script_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "install-golem.sh")
-                result = subprocess.run(["bash", script_path], capture_output=True, text=True, check=True)
+                script_url = GITHUB_SCRIPT_URLS["install_golem"]
+                
+                # Download the script
+                response = requests.get(script_url, timeout=15)
+                response.raise_for_status()
+                
+                # Create temporary file and write script content
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as temp_file:
+                    temp_file.write(response.text)
+                    temp_script_path = temp_file.name
+                
+                # Make script executable
+                os.chmod(temp_script_path, 0o755)
+                
+                # Execute the script
+                result = subprocess.run(["bash", temp_script_path], capture_output=True, text=True, check=True)
+                
+                # Clean up
+                os.unlink(temp_script_path)
                 
                 bootstrap_steps.append({
                     "step": current_step,
                     "action": "install_golem",
                     "status": "success",
                     "message": "Golem installed successfully",
-                    "output": result.stdout
+                    "output": result.stdout,
+                    "script_url": script_url
                 })
-                print(f"✅ Step {current_step} completed: Golem installed")
+                print(f"Step {current_step} completed: Golem installed")
+            except requests.RequestException as e:
+                bootstrap_steps.append({
+                    "step": current_step,
+                    "action": "install_golem",
+                    "status": "error",
+                    "message": "Failed to download install-golem script from GitHub",
+                    "error": str(e),
+                    "script_url": script_url
+                })
+                return {
+                    "status": "error",
+                    "message": f"Bootstrap failed at step {current_step}",
+                    "steps": bootstrap_steps,
+                    "error": str(e)
+                }
             except subprocess.CalledProcessError as e:
                 bootstrap_steps.append({
                     "step": current_step,
@@ -198,18 +242,51 @@ def bootstrap_host():
         print(f"[STEP {current_step}/5] Adding Golem path")
         
         try:
-            # Add Golem path using the existing script
-            script_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "add-golem-path.sh")
-            result = subprocess.run(["bash", script_path], capture_output=True, text=True, check=True)
+            # Add Golem path using the GitHub script
+            script_url = GITHUB_SCRIPT_URLS["add_golem_path"]
+            
+            # Download the script
+            response = requests.get(script_url, timeout=15)
+            response.raise_for_status()
+            
+            # Create temporary file and write script content
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as temp_file:
+                temp_file.write(response.text)
+                temp_script_path = temp_file.name
+            
+            # Make script executable
+            os.chmod(temp_script_path, 0o755)
+            
+            # Execute the script
+            result = subprocess.run(["bash", temp_script_path], capture_output=True, text=True, check=True)
+            
+            # Clean up
+            os.unlink(temp_script_path)
             
             bootstrap_steps.append({
                 "step": current_step,
                 "action": "add_golem_path",
                 "status": "success",
                 "message": "Golem path added successfully",
-                "output": result.stdout
+                "output": result.stdout,
+                "script_url": script_url
             })
-            print(f"✅ Step {current_step} completed: Golem path added")
+            print(f"Step {current_step} completed: Golem path added")
+        except requests.RequestException as e:
+            bootstrap_steps.append({
+                "step": current_step,
+                "action": "add_golem_path",
+                "status": "error",
+                "message": "Failed to download add-golem-path script from GitHub",
+                "error": str(e),
+                "script_url": script_url
+            })
+            return {
+                "status": "error",
+                "message": f"Bootstrap failed at step {current_step}",
+                "steps": bootstrap_steps,
+                "error": str(e)
+            }
         except subprocess.CalledProcessError as e:
             bootstrap_steps.append({
                 "step": current_step,
@@ -243,12 +320,26 @@ def bootstrap_host():
                 "status": "success",
                 "message": "KVM is already available"
             })
-            print(f"✅ Step {current_step} completed: KVM already available")
+            print(f"Step {current_step} completed: KVM already available")
         except subprocess.CalledProcessError:
-            # Install KVM using the existing script
+            # Install KVM using the GitHub script
             try:
-                script_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "install-kvm.sh")
-                kvm_process = subprocess.Popen(["bash", script_path], 
+                script_url = GITHUB_SCRIPT_URLS["install_kvm"]
+                
+                # Download the script
+                response = requests.get(script_url, timeout=15)
+                response.raise_for_status()
+                
+                # Create temporary file and write script content
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as temp_file:
+                    temp_file.write(response.text)
+                    temp_script_path = temp_file.name
+                
+                # Make script executable
+                os.chmod(temp_script_path, 0o755)
+                
+                # Execute the script as a background process
+                kvm_process = subprocess.Popen(["bash", temp_script_path], 
                                              stdout=subprocess.PIPE, 
                                              stderr=subprocess.PIPE, 
                                              text=True)
@@ -264,9 +355,10 @@ def bootstrap_host():
                         "action": "install_kvm",
                         "status": "success",
                         "message": "KVM installation started (running in background)",
-                        "note": "KVM installation is a long-running process. Use /check-requirements to verify completion."
+                        "note": "KVM installation is a long-running process. Use /check-requirements to verify completion.",
+                        "script_url": script_url
                     })
-                    print(f"✅ Step {current_step} completed: KVM installation started (background)")
+                    print(f"Step {current_step} completed: KVM installation started (background)")
                 else:
                     # Process completed quickly
                     stdout, stderr = kvm_process.communicate()
@@ -276,12 +368,31 @@ def bootstrap_host():
                             "action": "install_kvm",
                             "status": "success",
                             "message": "KVM installed successfully",
-                            "output": stdout
+                            "output": stdout,
+                            "script_url": script_url
                         })
-                        print(f"✅ Step {current_step} completed: KVM installed")
+                        print(f"Step {current_step} completed: KVM installed")
                     else:
                         raise subprocess.CalledProcessError(kvm_process.returncode, kvm_process.args, stdout, stderr)
+                
+                # Clean up temp file
+                os.unlink(temp_script_path)
                         
+            except requests.RequestException as e:
+                bootstrap_steps.append({
+                    "step": current_step,
+                    "action": "install_kvm",
+                    "status": "error",
+                    "message": "Failed to download install-kvm script from GitHub",
+                    "error": str(e),
+                    "script_url": script_url
+                })
+                return {
+                    "status": "error",
+                    "message": f"Bootstrap failed at step {current_step}",
+                    "steps": bootstrap_steps,
+                    "error": str(e)
+                }
             except subprocess.CalledProcessError as e:
                 bootstrap_steps.append({
                     "step": current_step,
@@ -307,18 +418,51 @@ def bootstrap_host():
         print(f"[STEP {current_step}/5] Setting KVM permissions")
         
         try:
-            # Set KVM permissions using the existing script
-            script_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "set-kvm-permission.sh")
-            result = subprocess.run(["bash", script_path], capture_output=True, text=True, check=True)
+            # Set KVM permissions using the GitHub script
+            script_url = GITHUB_SCRIPT_URLS["set_kvm_permissions"]
+            
+            # Download the script
+            response = requests.get(script_url, timeout=15)
+            response.raise_for_status()
+            
+            # Create temporary file and write script content
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as temp_file:
+                temp_file.write(response.text)
+                temp_script_path = temp_file.name
+            
+            # Make script executable
+            os.chmod(temp_script_path, 0o755)
+            
+            # Execute the script
+            result = subprocess.run(["bash", temp_script_path], capture_output=True, text=True, check=True)
+            
+            # Clean up
+            os.unlink(temp_script_path)
             
             bootstrap_steps.append({
                 "step": current_step,
                 "action": "set_kvm_permissions",
                 "status": "success",
                 "message": "KVM permissions set successfully",
-                "output": result.stdout
+                "output": result.stdout,
+                "script_url": script_url
             })
-            print(f"✅ Step {current_step} completed: KVM permissions set")
+            print(f"Step {current_step} completed: KVM permissions set")
+        except requests.RequestException as e:
+            bootstrap_steps.append({
+                "step": current_step,
+                "action": "set_kvm_permissions",
+                "status": "error",
+                "message": "Failed to download set-kvm-permission script from GitHub",
+                "error": str(e),
+                "script_url": script_url
+            })
+            return {
+                "status": "error",
+                "message": f"Bootstrap failed at step {current_step}",
+                "steps": bootstrap_steps,
+                "error": str(e)
+            }
         except subprocess.CalledProcessError as e:
             bootstrap_steps.append({
                 "step": current_step,
@@ -336,7 +480,7 @@ def bootstrap_host():
                 "error": str(e)
             }
         
-        print("🎉 Bootstrap process completed successfully!")
+        print("Bootstrap process completed successfully!")
         return {
             "status": "success",
             "message": "Bootstrap completed successfully",

@@ -5,6 +5,7 @@ This guide shows how to create a single standalone executable of the Golem Provi
 ## Quick Start
 
 1. **Build the executable:**
+
    ```bash
    cd golem
    ./scripts/build-macOS.sh
@@ -30,6 +31,7 @@ To distribute your application:
 3. Run: `./golem-api`
 
 **Requirements on target machine:**
+
 - No Python installation needed ✅
 - No pip/virtual environment needed ✅
 - `golemsp` must be installed (for Golem operations)
@@ -49,6 +51,7 @@ Once running, the API will be available at `http://localhost:8000`:
 ## Build Process Details
 
 The build script:
+
 1. Creates a Python virtual environment
 2. Installs dependencies (FastAPI, uvicorn, PyInstaller)
 3. Creates a standalone entry point script
